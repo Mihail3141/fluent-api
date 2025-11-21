@@ -1,27 +1,13 @@
-﻿using System;
-using System.Reflection;
+﻿using System.Reflection;
 
-namespace ObjectPrinting.Solved;
+namespace ObjectPrinting;
 
-public class StringMemberPrintingConfig<TOwner, TMember>
+public class StintingPrintConfig<TOwner>(PrintingConfig<TOwner> printingConfig, MemberInfo memberInfo)
+    : MemberPrintingConfig<TOwner, string>(printingConfig, memberInfo)
 {
-    private readonly PrintingConfig<TOwner> _parent;
-    private readonly MemberInfo _member;
-
-    internal StringMemberPrintingConfig(PrintingConfig<TOwner> parent, MemberInfo member)
+    public PrintingConfig<TOwner> TrimmedToLength(int length)
     {
-        _parent = parent;
-        _member = member;
-    }
-
-    // Специфично для string
-    public PrintingConfig<TOwner> TrimmedToLength(int maxLength)
-    {
-        if (typeof(TMember) != typeof(string))
-            throw new InvalidOperationException("TrimmedToLength доступен только для строковых свойств.");
-
-        ArgumentOutOfRangeException.ThrowIfNegative(maxLength);
-        _parent.TrimmedMembers[_member] = maxLength;
-        return _parent;
+        printingConfig.TrimmedMembers[memberInfo] = length;
+        return PrintingConfig;
     }
 }
