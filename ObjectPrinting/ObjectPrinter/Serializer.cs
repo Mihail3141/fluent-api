@@ -12,14 +12,14 @@ internal sealed class Serializer<TOwner>
     private readonly PrintingConfig<TOwner> config;
     private readonly HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
 
-    private static readonly Type[] FinalTypes =
-    {
+    private static readonly Type[] TerminalTypes =
+    [
         typeof(string), typeof(DateTime), typeof(TimeSpan),
         typeof(Guid), typeof(decimal),
         typeof(byte), typeof(sbyte), typeof(short), typeof(ushort),
         typeof(int), typeof(uint), typeof(long), typeof(ulong),
         typeof(float), typeof(double), typeof(bool), typeof(char)
-    };
+    ];
 
     internal Serializer(PrintingConfig<TOwner> config) => this.config = config;
 
@@ -39,34 +39,31 @@ internal sealed class Serializer<TOwner>
         }
 
         var type = obj.GetType();
-
-        // Исключённые типы
+        
         if (config.ExcludedTypes.Contains(type))
         {
             sb.AppendLine("[Excluded Type]");
             return;
         }
-
-        // Ограничение глубины
+        
         if (level >= config.MaxNestingLevel)
         {
-            sb.AppendLine($"[{type.Name} ...]");
+            sb.AppendLine($"[{FormatTypeName(type)} превышен уровень вложенности]");
             return;
         }
-
-        // Циклические ссылки
+        
         if (!type.IsValueType)
         {
             if (visited.Contains(obj))
             {
-                sb.AppendLine($"[CyclicRef {type.Name}]");
+                sb.AppendLine($"[CyclicRef {FormatTypeName(type)}]");
                 return;
             }
 
             visited.Add(obj);
         }
 
-        // 1) Приоритет: кастомный сериализатор ТИПА (включая массивы и любые коллекции)
+
         if (config.CustomTypeSerializers.TryGetValue(type, out var typeSer))
         {
             var text = InvokeSerializer(typeSer, obj);
@@ -74,17 +71,16 @@ internal sealed class Serializer<TOwner>
             return;
         }
 
-        // 2) Финальные типы и форматирование с культурой
-        if (IsFinal(type))
+
+        if (TerminalTypes.Contains(type) || type.IsEnum)
         {
             sb.Append(FormatScalar(obj, type, parentMember));
             return;
         }
-
-        // 3) Коллекции: словари
+        
         if (obj is IDictionary dict)
         {
-            sb.AppendLine(type.Name);
+            sb.AppendLine(FormatTypeName(type));
             foreach (DictionaryEntry entry in dict)
             {
                 Indent(sb, level + 1);
@@ -98,12 +94,11 @@ internal sealed class Serializer<TOwner>
 
             return;
         }
-
-        // 4) Коллекции: перечислимые (массивы, списки, и пр.) — если нет кастомного типа-сериализатора
+        
         if (obj is IEnumerable enumerable && type != typeof(string))
         {
-            sb.AppendLine(type.Name);
-            int i = 0;
+            sb.AppendLine(FormatTypeName(type));
+            var i = 0;
             foreach (var item in enumerable)
             {
                 Indent(sb, level + 1);
@@ -114,14 +109,13 @@ internal sealed class Serializer<TOwner>
 
             return;
         }
-
-        // 5) Сложные объекты: публичные свойства и поля
-        sb.AppendLine(type.Name);
+        
+        sb.AppendLine(FormatTypeName(type));
 
         foreach (var prop in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
             if (!prop.CanRead) continue;
-            if (config.ExcludedMembers.Contains(prop)) continue;
+            if (config.ExcludedMember.Contains(prop)) continue;
             if (config.ExcludedTypes.Contains(prop.PropertyType)) continue;
 
             Indent(sb, level + 1);
@@ -142,7 +136,7 @@ internal sealed class Serializer<TOwner>
 
         foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public))
         {
-            if (config.ExcludedMembers.Contains(field)) continue;
+            if (config.ExcludedMember.Contains(field)) continue;
             if (config.ExcludedTypes.Contains(field.FieldType)) continue;
 
             Indent(sb, level + 1);
@@ -165,12 +159,10 @@ internal sealed class Serializer<TOwner>
 
     private static void Indent(StringBuilder sb, int level)
         => sb.Append(new string('\t', level));
-
-    private static bool IsFinal(Type t) => FinalTypes.Contains(t) || t.IsEnum;
+    
 
     private string FormatScalar(object value, Type type, MemberInfo? parentMember)
     {
-        // Member-level serializer has higher priority already handled before call.
         if (config.CustomTypeSerializers.TryGetValue(type, out var del))
         {
             var s = InvokeSerializer(del, value);
@@ -182,13 +174,11 @@ internal sealed class Serializer<TOwner>
             var s = (string)value;
             return ApplyTrimming(s, parentMember);
         }
-
-        // Culture for numeric types and DateTime/decimal/float/double/etc.
-        if (config.CulturesForTypes.TryGetValue(type, out var culture))
-        {
-            if (value is IFormattable fmt)
-                return fmt.ToString(null, culture) + Environment.NewLine;
-        }
+        
+        if (!config.CulturesForTypes.TryGetValue(type, out var culture))
+            return value + Environment.NewLine;
+        if (value is IFormattable fmt)
+            return fmt.ToString(null, culture) + Environment.NewLine;
 
         return value + Environment.NewLine;
     }
@@ -221,8 +211,20 @@ internal sealed class Serializer<TOwner>
             return null;
         }
     }
+    
+    private static string FormatTypeName(Type t)
+    {
+        if (!t.IsGenericType) return t.Name;
 
-    // Reference equality comparer for visited set
+        var defName = t.Name;
+        var backtick = defName.IndexOf('`');
+        if (backtick > 0) defName = defName.Substring(0, backtick);
+
+        var args = t.GetGenericArguments();
+        var argNames = string.Join(", ", args.Select(FormatTypeName));
+        return $"{defName}<{argNames}>";
+    }
+    
     private sealed class ReferenceEqualityComparer : IEqualityComparer<object>
     {
         public static readonly ReferenceEqualityComparer Instance = new();
