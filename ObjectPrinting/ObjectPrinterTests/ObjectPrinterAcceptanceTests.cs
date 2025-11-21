@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using NUnit.Framework;
-using ObjectPrinting.Solved;
+
 
 namespace ObjectPrinting.Tests
 {
@@ -29,24 +29,26 @@ namespace ObjectPrinting.Tests
                 }
             };
             person.Friend = person;
-            
+
             var printer = ObjectPrinter.For<Person>()
-               .Exclude<Guid>()
-               .Exclude(p => p.Age)
-               .SetPrintingFor<int[]>().Using(arr => $"int[{arr.Length}] {{ {string.Join(", ", arr)} }}")
-               .SetPrintingFor<List<string>>().Using(list => $"List<string> (Count = {list.Count}) [ {string.Join(", ", list)} ]")
-               .SetPrintingFor<Dictionary<string, int>>().Using(dict =>
-               {
-                   var pairs = dict.Select(kv => $"{kv.Key}: {kv.Value}");
-                   return $"Dictionary<string,int> (Count = {dict.Count}) {{ {string.Join(", ", pairs)} }}";
-               })
-               .SetPrintingFor<int>().Using(n => $"Number: {n}")
-               .SetPrintingFor<double>().Using(CultureInfo.InvariantCulture)
-                .Trim<string>(p => p.Name, 10);
-            
+                .Excluding<Guid>()
+                .Excluding(p => p.Age)
+                .Printing<int[]>().Using(arr => $"int[{arr.Length}] {{ {string.Join(", ", arr)} }}")
+                .Printing<List<string>>()
+                .Using(list => $"List<string> (Count = {list.Count}) [ {string.Join(", ", list)} ]")
+                .Printing<Dictionary<string, int>>().Using(dict =>
+                {
+                    var pairs = dict.Select(kv => $"{kv.Key}: {kv.Value}");
+                    return $"Dictionary<string,int> (Count = {dict.Count}) {{ {string.Join(", ", pairs)} }}";
+                })
+                .Printing<int>().Using(n => $"Number: {n}")
+                .Printing<double>().Using(CultureInfo.InvariantCulture)
+                .Printing(p => p.Name).TrimmedToLength(3);
+
             var s1 = printer.PrintToString(person);
             var s2 = person.PrintToString();
             var s3 = person.PrintToString();
+            
             Console.WriteLine(s1);
             Console.WriteLine(s2);
             Console.WriteLine(s3);
