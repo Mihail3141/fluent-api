@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using NUnit.Framework;
 using FluentAssertions;
+using NUnit.Framework;
+using ObjectPrinting.ObjectPrinter;
 
-namespace ObjectPrinting.Tests;
+namespace ObjectPrinting.ObjectPrinterTests;
 
 [TestFixture]
 public class ObjectPrinterStandardSerializationTests
@@ -21,6 +22,8 @@ public class ObjectPrinterStandardSerializationTests
             Name = "Fai",
             Height = 160.5,
             Age = 20,
+            IQ = 120,
+            BirthDate = new DateTime(2029, 11, 16, 04, 05, 06, DateTimeKind.Utc),
             Scores = [95, 88, 76],
             Tags = ["brooch", "Nevada"],
             Ratings = new Dictionary<string, int>
@@ -46,47 +49,64 @@ public class ObjectPrinterStandardSerializationTests
     public void PrintToString_ShouldIncludeBasicProperties_WhenPersonIsValid()
     {
         var actual = setUpPerson.PrintToString();
-
         actual.Should().NotBeNullOrEmpty();
-        actual.Should().Contain("Id = f14dd761-3260-4463-a4ad-6ba14de2026c");
-        actual.Should().Contain("Person");
-        actual.Should().Contain("Name = Fai");
-        actual.Should().Contain("Age = 20");
-        actual.Should().Contain("Height = 160,5");
-        actual.Should().Contain("Tags = List");
-        actual.Should().Contain("Ratings = Dictionary");
-        actual.Should().Contain("Friend = Person");
-        actual.Should().Contain("Friend = null");
+        actual.Should().Contain($"{nameof(setUpPerson.Id)} = {setUpPerson!.Id}");
+        actual.Should().Contain($"{nameof(setUpPerson.Name)} = {setUpPerson.Name}");
+        actual.Should().Contain($"{nameof(setUpPerson.Height)} = {setUpPerson.Height}");
+        actual.Should().Contain($"{nameof(setUpPerson.Age)} = {setUpPerson.Age}");
+        actual.Should().Contain($"{nameof(setUpPerson.IQ)} = {setUpPerson.IQ}");
+        actual.Should().Contain($"{nameof(setUpPerson.BirthDate)} = {setUpPerson.BirthDate}");
+        actual.Should().Contain($"{nameof(setUpPerson.Scores)} = {setUpPerson.Scores.GetType().Name}");
+        actual.Should().Contain($"{nameof(setUpPerson.Tags)} = List<String>");
+        actual.Should().Contain($"{nameof(setUpPerson.Ratings)} = Dictionary<String, Int32>");
+        actual.Should().Contain($"{nameof(setUpPerson.Friend)} = {setUpPerson.Friend!.GetType().Name}");
+        actual.Should().Contain($"{nameof(setUpPerson.Friend.Friend)} = {null}");
     }
 
 
     [Test]
-    public void PrintToString_ShouldApplyMemberExclusion_WhenNameExcludedInConfig()
+    public void PrintToString_ShouldApplyMemberExclusion_WhenMemberExcludedInConfig()
     {
         var actual = setUpPerson.PrintToString(cfg => cfg
             .Excluding(p => p.Name));
 
-        actual.Should().NotContain("Name = Fai");
-        actual.Should().Contain("Id = f14dd761-3260-4463-a4ad-6ba14de2026c");
+        actual.Should().NotContain($"{nameof(setUpPerson.Name)} = {setUpPerson!.Name}");
+        actual.Should().Contain($"{nameof(setUpPerson.Id)} = {setUpPerson!.Id}");
     }
 
     [Test]
-    public void PrintToString_ShouldApplyTypeExclusion_WhenIntTypeExcludedInConfig()
+    public void PrintToString_ShouldApplyTypeExclusion_WhenTypeExcludedInConfig()
     {
         var actual = setUpPerson.PrintToString(cfg => cfg
             .Excluding<int>());
 
-        actual.Should().NotContain("Age = 20");
-        actual.Should().Contain("Id = f14dd761-3260-4463-a4ad-6ba14de2026c");
+        actual.Should().NotContain($"{nameof(setUpPerson.Age)} = {setUpPerson!.Age}");
+        actual.Should().NotContain($"{nameof(setUpPerson.IQ)} = {setUpPerson!.IQ}");
+        actual.Should().Contain($"{nameof(setUpPerson.Id)} = {setUpPerson!.Id}");
     }
 
     [Test]
-    public void PrintToString_ShouldUseCustomFormatter_WhenIntTypeFormatterIsConfigured()
+    public void PrintToString_ShouldUseCustomFormatter_WhenTypeFormatterIsConfigured()
     {
         var actual = setUpPerson.PrintToString(cfg => cfg
-            .Printing<int>().Using(n => $"Age: {n}"));
+            .Printing<int>().Using(n => $"|{n}|"));
+
+        actual.Should().Contain("Age = |20|");
+        actual.Should().NotContain("Age = 20");
+        actual.Should().Contain("IQ = |120|");
+        actual.Should().NotContain("IQ = 120");
+    }
+
+    [Test]
+    public void PrintToString_ShouldUseCustomFormatter_WhenMemberFormatterIsConfigured()
+    {
+        var actual = setUpPerson.PrintToString(cfg => cfg
+            .Printing(p => p.Age).Using(n => $"Age: {n}"));
 
         actual.Should().Contain("Age: 20");
+        actual.Should().NotContain("Age = 20");
+        actual.Should().Contain("IQ = 120");
+        actual.Should().NotContain("IQ: 120");
     }
 
     [Test]
@@ -95,25 +115,60 @@ public class ObjectPrinterStandardSerializationTests
         var actual = setUpPerson.PrintToString(cfg => cfg
             .Printing<double>().Using(CultureInfo.InvariantCulture));
 
-        actual.Should().Contain("Height = 160.5");
+        actual.Should().Contain($"{nameof(setUpPerson.Height)} = 160.5");
+        actual.Should().NotContain($"{nameof(setUpPerson.BirthDate)} = 11/16/2029 04:05:06");
     }
+
+    [Test]
+    public void PrintToString_ShouldUseInvariantCulture_WhenDateTimeCultureIsSetToInvariant()
+    {
+        var actual = setUpPerson.PrintToString(cfg => cfg
+            .Printing<DateTime>().Using(CultureInfo.InvariantCulture));
+
+        actual.Should().Contain($"{nameof(setUpPerson.BirthDate)} = 11/16/2029 04:05:06");
+        actual.Should().NotContain($"{nameof(setUpPerson.Height)} = 160.5");
+    }
+
 
     [Test]
     public void PrintToString_ShouldApplyMemberSerializer_WhenNameCustomSerializerIsSet()
     {
         var actual = setUpPerson.PrintToString(cfg => cfg
-            .Printing(p => p.Name).Using(p => p.ToUpper()));
+            .Printing(p => p!.Name).Using(p => p.ToUpper()));
 
-        actual.Should().Contain("Name = FAI");
+        actual.Should().Contain($"{nameof(setUpPerson.Name)} = FAI");
     }
 
     [Test]
-    public void PrintToString_ShouldTrimStringProperty_WhenNameTrimmedToLengthSpecified() // pomenyat
+    public void PrintToString_ShouldTrimStringProperty_WhenStringMemberTrimmedToLengthSpecified()
     {
         var actual = setUpPerson.PrintToString(cfg => cfg
-            .Printing(p => p.Name).TrimmedToLength(2));
+            .Printing(p => p.Name).StringTrimmedToLength(2));
 
-        actual.Should().Contain("Name = Fa");
+        actual.Should().Contain($"{nameof(setUpPerson.Name)} = Fa");
+        actual.Should().NotContain($"{nameof(setUpPerson.Name)} = Fai");
+    }
+
+    [Test]
+    public void PrintToString_ShouldTrimStringProperty_WhenIntMemberTrimmedToLengthSpecified()
+    {
+        var actual = setUpPerson.PrintToString(cfg => cfg
+            .Printing(p => p.IQ).TrimmedToLength(2));
+
+        actual.Should().Contain($"{nameof(setUpPerson.IQ)} = 12");
+        actual.Should().NotContain($"{nameof(setUpPerson.IQ)} = 120");
+    }
+
+    [Test]
+    public void PrintToString_ShouldTrimStringProperty_WhenIntTypeTrimmedToLengthSpecified()
+    {
+        var actual = setUpPerson.PrintToString(cfg => cfg
+            .Printing<int>().TrimmedToLength(1));
+
+        actual.Should().Contain($"{nameof(setUpPerson.IQ)} = 1");
+        actual.Should().NotContain($"{nameof(setUpPerson.IQ)} = 120");
+        actual.Should().Contain($"{nameof(setUpPerson.Age)} = 2");
+        actual.Should().NotContain($"{nameof(setUpPerson.Age)} = 20");
     }
 
     [Test]
@@ -127,13 +182,13 @@ public class ObjectPrinterStandardSerializationTests
             .Printing(p => p.Name).TrimmedToLength(2)
             .Printing(p => p.Name).Using(p => p.ToUpper()));
 
-        actual.Should().NotContain("Guid");
-        actual.Should().NotContain("Tags");
+        actual.Should().NotContain($"{nameof(setUpPerson.Id)}");
+        actual.Should().NotContain($"{nameof(setUpPerson.Tags)}");
         actual.Should().Contain("Number: 20");
         actual.Should().NotContain("Age = 20");
-        actual.Should().Contain("Height = 160.5");
-        actual.Should().NotContain("Heigh = 160,5");
-        actual.Should().Contain("Name = FA");
+        actual.Should().Contain($"{nameof(setUpPerson.Height)} = 160.5");
+        actual.Should().NotContain($"{nameof(setUpPerson.Height)} = 160,5");
+        actual.Should().Contain($"{nameof(setUpPerson.Name)} = FA");
     }
 
     [Test]
@@ -141,10 +196,10 @@ public class ObjectPrinterStandardSerializationTests
     {
         var actual = setUpPerson.PrintToString();
 
-        actual.Should().Contain("Scores = Int32[]");
-        actual.Should().Contain("[0] = 95");
-        actual.Should().Contain("[1] = 88");
-        actual.Should().Contain("[2] = 76");
+        actual.Should().Contain($"{nameof(setUpPerson.Scores)} = {setUpPerson!.Scores.GetType().Name}");
+        actual.Should().Contain($"[0] = {setUpPerson.Scores[0]}");
+        actual.Should().Contain($"[1] = {setUpPerson.Scores[1]}");
+        actual.Should().Contain($"[2] = {setUpPerson.Scores[2]}");
     }
 
     [Test]
@@ -152,9 +207,9 @@ public class ObjectPrinterStandardSerializationTests
     {
         var actual = setUpPerson.PrintToString();
 
-        actual.Should().Contain("Tags = List<String>");
-        actual.Should().Contain("[0] = brooch");
-        actual.Should().Contain("[1] = Nevada");
+        actual.Should().Contain($"{nameof(setUpPerson.Tags)} = List<String>");
+        actual.Should().Contain($"[0] = {setUpPerson.Tags[0]}");
+        actual.Should().Contain($"[1] = {setUpPerson.Tags[1]}");
     }
 
     [Test]
@@ -162,11 +217,11 @@ public class ObjectPrinterStandardSerializationTests
     {
         var actual = setUpPerson.PrintToString();
 
-        actual.Should().Contain("Ratings = Dictionary<String, Int32>");
-        actual.Should().Contain("Key = quality");
-        actual.Should().Contain("Value = 5");
-        actual.Should().Contain("Key = speed");
-        actual.Should().Contain("Value = 4");
+        actual.Should().Contain($"{nameof(setUpPerson.Ratings)} = Dictionary<String, Int32>");
+        actual.Should().Contain($"Key = {setUpPerson!.Ratings.Keys.First()}");
+        actual.Should().Contain($"Value = {setUpPerson.Ratings.Values.First()}");
+        actual.Should().Contain($"Key = {setUpPerson.Ratings.Keys.Last()}");
+        actual.Should().Contain($"Value = {setUpPerson.Ratings.Values.Last()}");
     }
 
     [Test]
@@ -243,6 +298,27 @@ public class ObjectPrinterStandardSerializationTests
         act.Should().NotThrow();
         actual.Should().Contain("CyclicRef");
     }
+
+    [Test]
+    public void PrintToString_ShouldNotShareVisitedState_WhenDifferentRootsShareSameFriend()
+    {
+        var sharedFriend = new Person { Name = "Shared", Age = 42 };
+
+        var person1 = new Person { Name = "P1", Friend = sharedFriend };
+
+        var person2 = new Person { Name = "P2", Friend = sharedFriend };
+
+        var actual1 = person1.PrintToString();
+        var actual2 = person2.PrintToString();
+
+
+        actual1.Should().Contain("Friend = Person");
+        actual1.Should().NotContain("CyclicRef");
+
+        actual2.Should().Contain("Friend = Person");
+        actual2.Should().NotContain("CyclicRef");
+    }
+
 
     [Test]
     public void PrintToString_ShouldReportNestingLevelExceeded_WhenFriendChainDepthBeyondMax()
