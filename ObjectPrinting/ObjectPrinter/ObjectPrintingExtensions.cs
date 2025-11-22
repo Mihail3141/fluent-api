@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ObjectPrinting;
+namespace ObjectPrinting.ObjectPrinter;
 
 public static class ObjectPrintingExtensions
 {

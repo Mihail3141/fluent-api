@@ -1,12 +1,14 @@
-﻿using System.Reflection;
+﻿using System;
+using System.Reflection;
 
-namespace ObjectPrinting;
+namespace ObjectPrinting.ObjectPrinter;
 
-public class StintingPrintConfig<TOwner>(PrintingConfig<TOwner> printingConfig, MemberInfo memberInfo)
+public class StringPrintConfig<TOwner>(PrintingConfig<TOwner> printingConfig, MemberInfo memberInfo)
     : MemberPrintingConfig<TOwner, string>(printingConfig, memberInfo)
 {
-    public PrintingConfig<TOwner> TrimmedToLength(int length)
-    {
+    public PrintingConfig<TOwner> StringTrimmedToLength(int length) //по сути уже не нужен, так как дублирует поведение TrimmedToLength.
+    {                                                               //Просто хотелось соблюсти формальности, чтобы этот метод отображался только у string.
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
         printingConfig.TrimmedMembers[memberInfo] = length;
         return PrintingConfig;
     }

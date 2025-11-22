@@ -2,31 +2,42 @@
 using System.Globalization;
 using System.Reflection;
 
-namespace ObjectPrinting;
+namespace ObjectPrinting.ObjectPrinter;
 
 public class MemberPrintingConfig<TOwner, TMemberType>(
     PrintingConfig<TOwner> printingConfig,
     MemberInfo? memberInfo = null)
 {
     protected readonly PrintingConfig<TOwner> PrintingConfig = printingConfig;
-    protected readonly MemberInfo MemberInfo = memberInfo;
+    private readonly MemberInfo? MemberInfo = memberInfo;
 
     public PrintingConfig<TOwner> Using(Func<TMemberType, string> printingMethod)
     {
         if (MemberInfo is null)
-            PrintingConfig.CustomTypeSerializers[typeof(TMemberType)] = printingMethod;
+            PrintingConfig.CustomTypeSerializers[typeof(TMemberType)] = Wrapper;
         else
-            PrintingConfig.CustomMemberSerializers[MemberInfo] = printingMethod;
+            PrintingConfig.CustomMemberSerializers[MemberInfo] = Wrapper;
+
         return PrintingConfig;
+
+        string Wrapper(object value) => printingMethod((TMemberType)value);
     }
 
     public PrintingConfig<TOwner> Using(CultureInfo culture)
     {
-        if (MemberInfo is not null)
-            throw new InvalidOperationException(
-                "Using(CultureInfo) доступен только для SetPrintingFor<T>(), а не для конкретного члена.");
-        
         PrintingConfig.CulturesForTypes[typeof(TMemberType)] = culture;
+        return PrintingConfig;
+    }
+
+    public PrintingConfig<TOwner> TrimmedToLength(int length)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+
+        if (MemberInfo is null)
+            PrintingConfig.TrimmedTypes[typeof(TMemberType)] = length;
+        else
+            PrintingConfig.TrimmedMembers[MemberInfo] = length;
+
         return PrintingConfig;
     }
 }
